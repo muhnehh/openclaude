@@ -8,7 +8,7 @@ import {
   formatOpenAICategoryMarker,
 } from './openaiErrorClassification.js'
 
-test('classifies localhost ECONNREFUSED as localhost resolution failure', () => {
+test('classifies localhost ECONNREFUSED as connection_refused', () => {
   const error = Object.assign(new TypeError('fetch failed'), {
     code: 'ECONNREFUSED',
   })
@@ -17,9 +17,24 @@ test('classifies localhost ECONNREFUSED as localhost resolution failure', () => 
     url: 'http://localhost:11434/v1/chat/completions',
   })
 
-  expect(failure.category).toBe('localhost_resolution_failed')
+  expect(failure.category).toBe('connection_refused')
   expect(failure.retryable).toBe(true)
   expect(failure.code).toBe('ECONNREFUSED')
+  expect(failure.hint).toContain('local server is running')
+})
+
+test('classifies localhost ENOTFOUND as localhost_resolution_failed', () => {
+  const error = Object.assign(new TypeError('getaddrinfo ENOTFOUND localhost'), {
+    code: 'ENOTFOUND',
+  })
+
+  const failure = classifyOpenAINetworkFailure(error, {
+    url: 'http://localhost:11434/v1/chat/completions',
+  })
+
+  expect(failure.category).toBe('localhost_resolution_failed')
+  expect(failure.retryable).toBe(true)
+  expect(failure.code).toBe('ENOTFOUND')
   expect(failure.hint).toContain('127.0.0.1')
 })
 
@@ -78,4 +93,9 @@ test('embeds and extracts category markers in formatted messages', () => {
   expect(formatted).toContain('[openai_category=endpoint_not_found]')
   expect(formatted).toContain('Hint: Confirm OPENAI_BASE_URL includes /v1.')
   expect(extractOpenAICategoryMarker(formatted)).toBe('endpoint_not_found')
+})
+
+test('ignores unknown category markers during extraction', () => {
+  const malformed = 'OpenAI API error 500 [openai_category=totally_fake_category]'
+  expect(extractOpenAICategoryMarker(malformed)).toBeUndefined()
 })

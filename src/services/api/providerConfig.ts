@@ -394,18 +394,21 @@ export function resolveProviderRequest(options?: {
   )
 
   const primaryEnvBaseUrl = isMistralMode
-    ? normalizedMistralEnvBaseUrl ?? DEFAULT_MISTRAL_BASE_URL
+    ? normalizedMistralEnvBaseUrl
     : asNamedEnvUrl(process.env.OPENAI_BASE_URL, 'OPENAI_BASE_URL')
 
-  const openAIApiBaseAlias = asNamedEnvUrl(
-    process.env.OPENAI_API_BASE,
-    'OPENAI_API_BASE',
-  )
+  const fallbackEnvBaseUrl = isMistralMode
+    ? (primaryEnvBaseUrl === undefined
+      ? asNamedEnvUrl(process.env.OPENAI_API_BASE, 'OPENAI_API_BASE') ?? DEFAULT_MISTRAL_BASE_URL
+      : undefined)
+    : (primaryEnvBaseUrl === undefined
+      ? asNamedEnvUrl(process.env.OPENAI_API_BASE, 'OPENAI_API_BASE')
+      : undefined)
 
   const envBaseUrlRaw =
     explicitBaseUrl ??
     primaryEnvBaseUrl ??
-    openAIApiBaseAlias
+    fallbackEnvBaseUrl
 
   const isCodexModelForGithub = isGithubMode && isCodexAlias(requestedModel)
   const envBaseUrl =

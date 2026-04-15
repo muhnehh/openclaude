@@ -87,6 +87,19 @@ const COPILOT_HEADERS: Record<string, string> = {
   'Copilot-Integration-Id': 'vscode-chat',
 }
 
+const SENSITIVE_URL_QUERY_PARAM_NAMES = [
+  'api_key',
+  'key',
+  'token',
+  'access_token',
+  'refresh_token',
+  'signature',
+  'sig',
+  'secret',
+  'password',
+  'authorization',
+]
+
 function isGithubModelsMode(): boolean {
   return isEnvTruthy(process.env.CLAUDE_CODE_USE_GITHUB)
 }
@@ -134,6 +147,53 @@ function hasGeminiApiHost(baseUrl: string | undefined): boolean {
 function formatRetryAfterHint(response: Response): string {
   const ra = response.headers.get('retry-after')
   return ra ? ` (Retry-After: ${ra})` : ''
+}
+
+function shouldRedactUrlQueryParam(name: string): boolean {
+  const lower = name.toLowerCase()
+  return SENSITIVE_URL_QUERY_PARAM_NAMES.some(token => lower.includes(token))
+}
+
+function redactUrlForDiagnostics(url: string): string {
+  try {
+    const parsed = new URL(url)
+    if (parsed.username) {
+      parsed.username = 'redacted'
+    }
+    if (parsed.password) {
+      parsed.password = 'redacted'
+    }
+
+    for (const key of parsed.searchParams.keys()) {
+      if (shouldRedactUrlQueryParam(key)) {
+        parsed.searchParams.set(key, 'redacted')
+      }
+    }
+
+    const serialized = parsed.toString()
+    return redactSecretValueForDisplay(serialized, process.env as SecretValueSource) ?? serialized
+  } catch {
+    return redactSecretValueForDisplay(url, process.env as SecretValueSource) ?? url
+  }
+}
+
+function isAbortError(error: unknown): boolean {
+  if (error instanceof Error) {
+    if (error.name === 'AbortError') {
+      return true
+    }
+
+    const lowerMessage = error.message.toLowerCase()
+    if (lowerMessage.includes('aborted') || lowerMessage.includes('aborterror')) {
+      return true
+    }
+  }
+
+  if (typeof DOMException !== 'undefined' && error instanceof DOMException) {
+    return error.name === 'AbortError'
+  }
+
+  return false
 }
 
 function sleepMs(ms: number): Promise<void> {
@@ -1439,12 +1499,17 @@ class OpenAIShimMessages {
       error: unknown,
       requestUrl: string,
     ): never => {
+      if (isAbortError(error) || options?.signal?.aborted) {
+        throw error
+      }
+
       const failure = classifyOpenAINetworkFailure(error, {
         url: requestUrl,
       })
+      const redactedUrl = redactUrlForDiagnostics(requestUrl)
 
       logForDebugging(
-        `[OpenAIShim] transport failure category=${failure.category} retryable=${failure.retryable} code=${failure.code ?? 'unknown'} method=POST url=${requestUrl} model=${request.resolvedModel} message=${failure.message}`,
+        `[OpenAIShim] transport failure category=${failure.category} retryable=${failure.retryable} code=${failure.code ?? 'unknown'} method=POST url=${redactedUrl} model=${request.resolvedModel} message=${failure.message}`,
         { level: 'warn' },
       )
 
@@ -1472,9 +1537,10 @@ class OpenAIShimMessages {
         body: errorBody,
         url: requestUrl,
       })
+      const redactedUrl = redactUrlForDiagnostics(requestUrl)
 
       logForDebugging(
-        `[OpenAIShim] request failed category=${failure.category} retryable=${failure.retryable} status=${status} method=POST url=${requestUrl} model=${request.resolvedModel}`,
+        `[OpenAIShim] request failed category=${failure.category} retryable=${failure.retryable} status=${status} method=POST url=${redactedUrl} model=${request.resolvedModel}`,
         { level: 'warn' },
       )
 

@@ -27,6 +27,31 @@ const OPENAI_CATEGORY_MARKER_PREFIX = '[openai_category='
 
 const LOCALHOST_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1'])
 
+const OPENAI_COMPATIBILITY_FAILURE_CATEGORIES: ReadonlySet<OpenAICompatibilityFailureCategory> =
+  new Set<OpenAICompatibilityFailureCategory>([
+    'connection_refused',
+    'localhost_resolution_failed',
+    'request_timeout',
+    'network_error',
+    'auth_invalid',
+    'rate_limited',
+    'model_not_found',
+    'endpoint_not_found',
+    'context_overflow',
+    'tool_call_incompatible',
+    'malformed_provider_response',
+    'provider_unavailable',
+    'unknown',
+  ])
+
+function isOpenAICompatibilityFailureCategory(
+  value: string,
+): value is OpenAICompatibilityFailureCategory {
+  return OPENAI_COMPATIBILITY_FAILURE_CATEGORIES.has(
+    value as OpenAICompatibilityFailureCategory,
+  )
+}
+
 function getErrorCode(error: unknown): string | undefined {
   let current: unknown = error
   const maxDepth = 5
@@ -132,11 +157,13 @@ export function extractOpenAICategoryMarker(
   message: string,
 ): OpenAICompatibilityFailureCategory | undefined {
   const match = message.match(/\[openai_category=([a-z_]+)]/)
-  if (!match?.[1]) {
+  const category = match?.[1]
+
+  if (!category || !isOpenAICompatibilityFailureCategory(category)) {
     return undefined
   }
 
-  return match[1] as OpenAICompatibilityFailureCategory
+  return category
 }
 
 export function buildOpenAICompatibilityErrorMessage(
@@ -178,10 +205,10 @@ export function classifyOpenAINetworkFailure(
   if (
     isLocalHost &&
     (
-      code === 'ECONNREFUSED' ||
       code === 'ENOTFOUND' ||
       code === 'EAI_AGAIN' ||
-      lowerMessage.includes('fetch failed')
+      lowerMessage.includes('getaddrinfo') ||
+      (code === undefined && lowerMessage.includes('fetch failed'))
     )
   ) {
     return {
@@ -201,7 +228,9 @@ export function classifyOpenAINetworkFailure(
       retryable: true,
       message,
       code,
-      hint: 'Connection was refused by the provider endpoint. Ensure the server is running and the port is correct.',
+      hint: isLocalHost
+        ? 'Connection to the local provider was refused. Ensure the local server is running and listening on the configured port.'
+        : 'Connection was refused by the provider endpoint. Ensure the server is running and the port is correct.',
     }
   }
 

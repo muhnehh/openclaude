@@ -2796,7 +2796,7 @@ test('classifies localhost transport failures with actionable category marker', 
       max_tokens: 64,
       stream: false,
     }),
-  ).rejects.toThrow('openai_category=localhost_resolution_failed')
+  ).rejects.toThrow('openai_category=connection_refused')
 
   await expect(
     client.beta.messages.create({
@@ -2805,7 +2805,33 @@ test('classifies localhost transport failures with actionable category marker', 
       max_tokens: 64,
       stream: false,
     }),
-  ).rejects.toThrow('127.0.0.1')
+  ).rejects.toThrow('local server is running')
+})
+
+test('propagates AbortError without wrapping it as transport failure', async () => {
+  process.env.OPENAI_BASE_URL = 'http://localhost:11434/v1'
+
+  const abortError = new DOMException('The operation was aborted.', 'AbortError')
+  globalThis.fetch = (async () => {
+    throw abortError
+  }) as FetchType
+
+  const controller = new AbortController()
+  controller.abort()
+
+  const client = createOpenAIShimClient({}) as OpenAIShimClient
+
+  await expect(
+    client.beta.messages.create(
+      {
+        model: 'qwen2.5-coder:7b',
+        messages: [{ role: 'user', content: 'hello' }],
+        max_tokens: 64,
+        stream: false,
+      },
+      { signal: controller.signal },
+    ),
+  ).rejects.toBe(abortError)
 })
 
 test('classifies chat-completions endpoint 404 failures with endpoint_not_found marker', async () => {
