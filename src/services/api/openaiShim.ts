@@ -1499,7 +1499,7 @@ class OpenAIShimMessages {
       error: unknown,
       requestUrl: string,
     ): never => {
-      if (isAbortError(error) || options?.signal?.aborted) {
+      if (options?.signal?.aborted) {
         throw error
       }
 
