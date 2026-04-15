@@ -177,25 +177,6 @@ function redactUrlForDiagnostics(url: string): string {
   }
 }
 
-function isAbortError(error: unknown): boolean {
-  if (error instanceof Error) {
-    if (error.name === 'AbortError') {
-      return true
-    }
-
-    const lowerMessage = error.message.toLowerCase()
-    if (lowerMessage.includes('aborted') || lowerMessage.includes('aborterror')) {
-      return true
-    }
-  }
-
-  if (typeof DOMException !== 'undefined' && error instanceof DOMException) {
-    return error.name === 'AbortError'
-  }
-
-  return false
-}
-
 function sleepMs(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
