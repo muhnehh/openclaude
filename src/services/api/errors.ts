@@ -151,6 +151,12 @@ function mapOpenAICompatibilityFailureToAssistantMessage(options: {
         content: `${API_ERROR_MESSAGE_PREFIX}: ${stripOpenAICompatibilityMetadata(options.rawMessage)}`,
         error: 'unknown',
       })
+
+    default:
+      return createAssistantAPIErrorMessage({
+        content: `${API_ERROR_MESSAGE_PREFIX}: ${stripOpenAICompatibilityMetadata(options.rawMessage)}`,
+        error: 'unknown',
+      })
   }
 }
 
