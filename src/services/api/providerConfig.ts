@@ -8,6 +8,7 @@ import {
   readCodexCredentials,
   type CodexCredentialBlob,
 } from '../../utils/codexCredentials.js'
+import { logForDebugging } from '../../utils/debug.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
 import {
   asTrimmedString,
@@ -129,8 +130,32 @@ function isPrivateIpv6Address(hostname: string): boolean {
 function asEnvUrl(value: string | undefined): string | undefined {
   if (!value) return undefined
   const trimmed = value.trim()
-  if (!trimmed || trimmed === 'undefined') return undefined
+  if (!trimmed) return undefined
+  if (trimmed === 'undefined') {
+    return undefined
+  }
   return trimmed
+}
+
+function asNamedEnvUrl(
+  value: string | undefined,
+  envName: string,
+): string | undefined {
+  if (!value) return undefined
+
+  const normalized = asEnvUrl(value)
+  if (normalized !== undefined) {
+    return normalized
+  }
+
+  if (value.trim() === 'undefined') {
+    logForDebugging(
+      `[provider-config] Ignoring invalid ${envName} value "undefined". This literal string usually means an unquoted shell expansion.`,
+      { level: 'warn' },
+    )
+  }
+
+  return undefined
 }
 
 function readNestedString(
@@ -362,14 +387,23 @@ export function resolveProviderRequest(options?: {
     (isGithubMode ? 'github:copilot' : 'gpt-4o')
   const descriptor = parseModelDescriptor(requestedModel)
   const explicitBaseUrl = asEnvUrl(options?.baseUrl)
+
+  const primaryEnvBaseUrl = isMistralMode
+    ? asNamedEnvUrl(
+        process.env.MISTRAL_BASE_URL ?? DEFAULT_MISTRAL_BASE_URL,
+        'MISTRAL_BASE_URL',
+      )
+    : asNamedEnvUrl(process.env.OPENAI_BASE_URL, 'OPENAI_BASE_URL')
+
+  const openAIApiBaseAlias = asNamedEnvUrl(
+    process.env.OPENAI_API_BASE,
+    'OPENAI_API_BASE',
+  )
+
   const envBaseUrlRaw =
     explicitBaseUrl ??
-    asEnvUrl(
-      isMistralMode
-        ? (process.env.MISTRAL_BASE_URL ?? DEFAULT_MISTRAL_BASE_URL)
-        : process.env.OPENAI_BASE_URL
-    ) ??
-    asEnvUrl(process.env.OPENAI_API_BASE)
+    primaryEnvBaseUrl ??
+    openAIApiBaseAlias
 
   const isCodexModelForGithub = isGithubMode && isCodexAlias(requestedModel)
   const envBaseUrl =

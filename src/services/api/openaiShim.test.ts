@@ -2775,3 +2775,58 @@ test('streaming: strips leaked reasoning preamble when split across multiple con
 
   expect(textDeltas).toEqual(['Hey! How can I help you today?'])
 })
+
+test('classifies localhost transport failures with actionable category marker', async () => {
+  process.env.OPENAI_BASE_URL = 'http://localhost:11434/v1'
+
+  const transportError = Object.assign(new TypeError('fetch failed'), {
+    code: 'ECONNREFUSED',
+  })
+
+  globalThis.fetch = (async () => {
+    throw transportError
+  }) as FetchType
+
+  const client = createOpenAIShimClient({}) as OpenAIShimClient
+
+  await expect(
+    client.beta.messages.create({
+      model: 'qwen2.5-coder:7b',
+      messages: [{ role: 'user', content: 'hello' }],
+      max_tokens: 64,
+      stream: false,
+    }),
+  ).rejects.toThrow('openai_category=localhost_resolution_failed')
+
+  await expect(
+    client.beta.messages.create({
+      model: 'qwen2.5-coder:7b',
+      messages: [{ role: 'user', content: 'hello' }],
+      max_tokens: 64,
+      stream: false,
+    }),
+  ).rejects.toThrow('127.0.0.1')
+})
+
+test('classifies chat-completions endpoint 404 failures with endpoint_not_found marker', async () => {
+  process.env.OPENAI_BASE_URL = 'http://localhost:11434'
+
+  globalThis.fetch = (async () =>
+    new Response('Not Found', {
+      status: 404,
+      headers: {
+        'Content-Type': 'text/plain',
+      },
+    })) as FetchType
+
+  const client = createOpenAIShimClient({}) as OpenAIShimClient
+
+  await expect(
+    client.beta.messages.create({
+      model: 'qwen2.5-coder:7b',
+      messages: [{ role: 'user', content: 'hello' }],
+      max_tokens: 64,
+      stream: false,
+    }),
+  ).rejects.toThrow('openai_category=endpoint_not_found')
+})

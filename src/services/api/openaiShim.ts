@@ -53,6 +53,11 @@ import {
   resolveProviderRequest,
   getGithubEndpointType,
 } from './providerConfig.js'
+import {
+  buildOpenAICompatibilityErrorMessage,
+  classifyOpenAIHttpFailure,
+  classifyOpenAINetworkFailure,
+} from './openaiErrorClassification.js'
 import { sanitizeSchemaForOpenAICompat } from '../../utils/schemaSanitizer.js'
 import { redactSecretValueForDisplay } from '../../utils/providerProfile.js'
 import {
@@ -1429,9 +1434,69 @@ class OpenAIShimMessages {
     }
 
     const maxAttempts = isGithub ? GITHUB_429_MAX_RETRIES : 1
+
+    const throwClassifiedTransportError = (
+      error: unknown,
+      requestUrl: string,
+    ): never => {
+      const failure = classifyOpenAINetworkFailure(error, {
+        url: requestUrl,
+      })
+
+      logForDebugging(
+        `[OpenAIShim] transport failure category=${failure.category} retryable=${failure.retryable} code=${failure.code ?? 'unknown'} method=POST url=${requestUrl} model=${request.resolvedModel} message=${failure.message}`,
+        { level: 'warn' },
+      )
+
+      throw APIError.generate(
+        503,
+        undefined,
+        buildOpenAICompatibilityErrorMessage(
+          `OpenAI API transport error: ${failure.message}${failure.code ? ` (code=${failure.code})` : ''}`,
+          failure,
+        ),
+        new Headers(),
+      )
+    }
+
+    const throwClassifiedHttpError = (
+      status: number,
+      errorBody: string,
+      parsedBody: object | undefined,
+      responseHeaders: Headers,
+      requestUrl: string,
+      rateHint = '',
+    ): never => {
+      const failure = classifyOpenAIHttpFailure({
+        status,
+        body: errorBody,
+        url: requestUrl,
+      })
+
+      logForDebugging(
+        `[OpenAIShim] request failed category=${failure.category} retryable=${failure.retryable} status=${status} method=POST url=${requestUrl} model=${request.resolvedModel}`,
+        { level: 'warn' },
+      )
+
+      throw APIError.generate(
+        status,
+        parsedBody,
+        buildOpenAICompatibilityErrorMessage(
+          `OpenAI API error ${status}: ${errorBody}${rateHint}`,
+          failure,
+        ),
+        responseHeaders,
+      )
+    }
+
     let response: Response | undefined
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      response = await fetch(chatCompletionsUrl, fetchInit)
+      try {
+        response = await fetch(chatCompletionsUrl, fetchInit)
+      } catch (error) {
+        throwClassifiedTransportError(error, chatCompletionsUrl)
+      }
+
       if (response.ok) {
         return response
       }
@@ -1504,34 +1569,43 @@ class OpenAIShimMessages {
             }
           }
 
-          const responsesResponse = await fetch(responsesUrl, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(responsesBody),
-            signal: options?.signal,
-          })
+          let responsesResponse: Response
+          try {
+            responsesResponse = await fetch(responsesUrl, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(responsesBody),
+              signal: options?.signal,
+            })
+          } catch (error) {
+            throwClassifiedTransportError(error, responsesUrl)
+          }
+
           if (responsesResponse.ok) {
             return responsesResponse
           }
           const responsesErrorBody = await responsesResponse.text().catch(() => 'unknown error')
           let responsesErrorResponse: object | undefined
           try { responsesErrorResponse = JSON.parse(responsesErrorBody) } catch { /* raw text */ }
-          throw APIError.generate(
+          throwClassifiedHttpError(
             responsesResponse.status,
+            responsesErrorBody,
             responsesErrorResponse,
-            `OpenAI API error ${responsesResponse.status}: ${responsesErrorBody}`,
             responsesResponse.headers,
+            responsesUrl,
           )
         }
       }
 
       let errorResponse: object | undefined
       try { errorResponse = JSON.parse(errorBody) } catch { /* raw text */ }
-      throw APIError.generate(
+      throwClassifiedHttpError(
         response.status,
+        errorBody,
         errorResponse,
-        `OpenAI API error ${response.status}: ${errorBody}${rateHint}`,
         response.headers as unknown as Headers,
+        chatCompletionsUrl,
+        rateHint,
       )
     }
 
