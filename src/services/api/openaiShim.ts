@@ -1490,12 +1490,10 @@ class OpenAIShimMessages {
       })
       const redactedUrl = redactUrlForDiagnostics(requestUrl)
       const safeMessage =
-        redactUrlForDiagnostics(failure.message) ??
         redactSecretValueForDisplay(
           failure.message,
           process.env as SecretValueSource,
-        ) ??
-        'Request failed'
+        ) || 'Request failed'
 
       logForDebugging(
         `[OpenAIShim] transport failure category=${failure.category} retryable=${failure.retryable} code=${failure.code ?? 'unknown'} method=POST url=${redactedUrl} model=${request.resolvedModel} message=${failure.message}`,
