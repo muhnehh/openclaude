@@ -14,6 +14,7 @@ test('classifies localhost ECONNREFUSED as connection_refused', () => {
   })
 
   const failure = classifyOpenAINetworkFailure(error, {
+    url: 'http://localhost:11434/v1/chat/completions',
   })
 
   expect(failure.category).toBe('connection_refused')
@@ -28,6 +29,7 @@ test('classifies localhost ENOTFOUND as localhost_resolution_failed', () => {
   })
 
   const failure = classifyOpenAINetworkFailure(error, {
+    url: 'http://localhost:11434/v1/chat/completions',
   })
 
   expect(failure.category).toBe('localhost_resolution_failed')

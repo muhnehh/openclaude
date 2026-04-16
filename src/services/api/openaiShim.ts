@@ -1564,6 +1564,11 @@ class OpenAIShimMessages {
       
         throwClassifiedTransportError(error, chatCompletionsUrl)
       }
+
+            if (response.ok) {
+              return response
+            }
+
       if (
         isGithub &&
         response.status === 429 &&
