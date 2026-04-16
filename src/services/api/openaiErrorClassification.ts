@@ -247,7 +247,6 @@ export function classifyOpenAINetworkFailure(
 export function classifyOpenAIHttpFailure(options: {
   status: number
   body: string
-  url: string
 }): OpenAICompatibilityFailure {
   const body = options.body ?? ''
 
