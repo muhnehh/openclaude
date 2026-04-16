@@ -1496,7 +1496,7 @@ class OpenAIShimMessages {
         ) || 'Request failed'
 
       logForDebugging(
-        `[OpenAIShim] transport failure category=${failure.category} retryable=${failure.retryable} code=${failure.code ?? 'unknown'} method=POST url=${redactedUrl} model=${request.resolvedModel} message=${failure.message}`,
+        `[OpenAIShim] transport failure category=${failure.category} retryable=${failure.retryable} code=${failure.code ?? 'unknown'} method=POST url=${redactedUrl} model=${request.resolvedModel} message=${safeMessage}`,
         { level: 'warn' },
       )
 
