@@ -47,6 +47,7 @@ import {
   type AnthropicUsage,
   type ShimCreateParams,
 } from './codexShim.js'
+import { fetchWithProxyRetry } from './fetchWithProxyRetry.js'
 import {
   isLocalProviderUrl,
   resolveRuntimeCodexCredentials,
@@ -1544,6 +1545,7 @@ class OpenAIShimMessages {
         throwClassifiedTransportError(error, chatCompletionsUrl)
       }
 
+      response = await fetchWithProxyRetry(chatCompletionsUrl, fetchInit)
       if (response.ok) {
         return response
       }
@@ -1628,6 +1630,12 @@ class OpenAIShimMessages {
             throwClassifiedTransportError(error, responsesUrl)
           }
 
+          const responsesResponse = await fetchWithProxyRetry(responsesUrl, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(responsesBody),
+            signal: options?.signal,
+          })
           if (responsesResponse.ok) {
             return responsesResponse
           }
