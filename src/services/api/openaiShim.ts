@@ -1708,7 +1708,7 @@ class OpenAIShimMessages {
           } catch (error) {
             throwClassifiedTransportError(error, responsesUrl)
           }
-          
+
           if (responsesResponse.ok) {
             return responsesResponse
           }

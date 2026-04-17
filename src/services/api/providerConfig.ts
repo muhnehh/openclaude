@@ -495,6 +495,9 @@ export function resolveProviderRequest(options?: {
     ? normalizedMistralEnvBaseUrl
     : asNamedEnvUrl(process.env.OPENAI_BASE_URL, 'OPENAI_BASE_URL')
 
+  // In Mistral mode, a literal "undefined" MISTRAL_BASE_URL is treated as
+  // misconfiguration and falls back to OPENAI_API_BASE, then
+  // DEFAULT_MISTRAL_BASE_URL for a safe default endpoint.
   const fallbackEnvBaseUrl = isMistralMode
     ? (primaryEnvBaseUrl === undefined
       ? asNamedEnvUrl(process.env.OPENAI_API_BASE, 'OPENAI_API_BASE') ?? DEFAULT_MISTRAL_BASE_URL
